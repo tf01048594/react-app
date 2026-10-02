@@ -22,12 +22,20 @@ function runCheck(name, command, cwd, key) {
         });
 
         console.log(`✓ ${name}: PASS`);
-        results[key] = "PASS";
+        results[key] = {
+            status: "PASS"
+        };
 
         return "PASS";
-    } catch {
+    } catch (error) {
         console.log(`✗ ${name}: FAIL`);
-        results[key] = "FAIL";
+
+        results[key] = {
+            status: "FAIL",
+            exitCode: error.status ?? null,
+            signal: error.signal ?? null
+        };
+
         hasFailure = true;
 
         return "FAIL";
@@ -39,12 +47,43 @@ function runOptionalCheck(name, command, cwd, key, isConfigured) {
 
     if (!isConfigured) {
         console.log(`- ${name}: NOT_CONFIGURED`);
-        results[key] = "NOT_CONFIGURED";
-
+    
+        results[key] = {
+            status: "NOT_CONFIGURED"
+        };
+    
         return "NOT_CONFIGURED";
     }
 
     return runCheck(name, command, cwd, key);
+}
+
+function getChangedFiles() {
+    try {
+        const output = execSync(
+            "git diff --name-status HEAD",
+            {
+                cwd: root,
+                encoding: "utf8",
+                shell: true
+            }
+        );
+
+        return output
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map(line => {
+                const [status, ...fileParts] = line.split("\t");
+
+                return {
+                    status,
+                    file: fileParts.join("\t")
+                };
+            });
+    } catch {
+        return [];
+    }
 }
 
 // Frontend
@@ -79,11 +118,14 @@ runOptionalCheck(
     true
 );
 
+const changedFiles = getChangedFiles();
+
 console.log("\n==============================");
 
 const summary = {
     success: !hasFailure,
     status: hasFailure ? "FAILED" : "PASSED",
+    changedFiles,
     results
 };
 
