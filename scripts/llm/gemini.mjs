@@ -1,9 +1,7 @@
-let previousInteractionId = null;
+let geminiHistory = null;
 
 function toGeminiSchema(schema) {
-    if (!schema || typeof schema !== "object") {
-        return schema;
-    }
+    if (!schema || typeof schema !== "object") return schema;
 
     const result = { ...schema };
     delete result.additionalProperties;
@@ -46,12 +44,15 @@ function toGeminiTools(tools) {
         }));
 }
 
-function toUserInput(input) {
+function toInitialInput(input) {
     const firstUserMessage = input.find(
         item => item.role === "user" && typeof item.content === "string"
     );
 
-    return firstUserMessage?.content ?? "";
+    return [{
+        type: "user_input",
+        content: [{ type: "text", text: firstUserMessage?.content ?? "" }]
+    }];
 }
 
 function toFunctionResults(input) {
@@ -61,30 +62,20 @@ function toFunctionResults(input) {
             type: "function_result",
             name: item.name,
             call_id: item.call_id,
-            result: [
-                {
-                    type: "text",
-                    text: item.output ?? "{}"
-                }
-            ]
+            result: [{
+                type: "text",
+                text: item.output ?? "{}"
+            }]
         }));
 }
 
 export async function callGemini({ apiKey, model, input, tools }) {
-    const functionResults = toFunctionResults(input);
-
-    const request = {
-        model,
-        store: true,
-        tools: toGeminiTools(tools)
-    };
-
-    if (previousInteractionId && functionResults.length > 0) {
-        request.previous_interaction_id = previousInteractionId;
-        request.input = functionResults;
-    } else {
-        request.input = toUserInput(input);
+    if (!geminiHistory) {
+        geminiHistory = toInitialInput(input);
     }
+
+    const functionResults = toFunctionResults(input);
+    geminiHistory.push(...functionResults);
 
     const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/interactions",
@@ -94,7 +85,12 @@ export async function callGemini({ apiKey, model, input, tools }) {
                 "x-goog-api-key": apiKey,
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify(request)
+            body: JSON.stringify({
+                model,
+                store: false,
+                input: geminiHistory,
+                tools: toGeminiTools(tools)
+            })
         }
     );
 
@@ -105,9 +101,12 @@ export async function callGemini({ apiKey, model, input, tools }) {
     }
 
     const data = JSON.parse(body);
-    previousInteractionId = data.id ?? previousInteractionId;
-
     const steps = data.steps ?? [];
+
+    // Preserve Gemini's model-generated steps exactly as returned.
+    // This is required for stateless function-calling history.
+    geminiHistory.push(...steps);
+
     const functionCalls = steps.filter(step => step.type === "function_call");
 
     return {
