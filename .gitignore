@@ -25,4 +25,4 @@ pnpm-debug.log*
 Thumbs.db
 
 # TypeScript
-*.tsbuildinfo
+*.tsbuildinfo\n\n# AI validation output\n.ai/validation-report.json\n
