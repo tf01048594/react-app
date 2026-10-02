@@ -135,22 +135,65 @@ function readTextFile(relativePath) {
     return fs.readFileSync(filePath, "utf8");
 }
 
-function listFiles(relativePath = ".") {
+function listFiles(relativePath = ".", depth = 2) {
     const directory = resolveInsideRoot(relativePath);
 
     if (!fs.existsSync(directory)) {
         throw new Error(`Directory not found: ${relativePath}`);
     }
 
-    return fs.readdirSync(directory, { withFileTypes: true })
-        .filter(entry => {
-            const child = path.posix.join(relativePath.replaceAll("\\", "/"), entry.name);
-            return !isProtectedPath(child);
+    const normalizedPath = relativePath.replaceAll("\\", "/").replace(/^\.\//, "");
+
+    function visit(currentDirectory, currentRelativePath, remainingDepth) {
+        return fs.readdirSync(currentDirectory, { withFileTypes: true })
+            .filter(entry => {
+                const child = path.posix.join(currentRelativePath, entry.name);
+                return !isProtectedPath(child);
+            })
+            .flatMap(entry => {
+                const childRelativePath = path.posix.join(currentRelativePath, entry.name);
+
+                if (entry.isDirectory() && remainingDepth > 0) {
+                    return [{
+                        name: entry.name,
+                        path: childRelativePath,
+                        type: "directory",
+                        children: visit(
+                            path.join(currentDirectory, entry.name),
+                            childRelativePath,
+                            remainingDepth - 1
+                        )
+                    }];
+                }
+
+                return [{
+                    name: entry.name,
+                    path: childRelativePath,
+                    type: entry.isDirectory() ? "directory" : "file"
+                }];
+            });
+    }
+
+    return visit(directory, normalizedPath || ".", Math.max(0, Number(depth) || 0));
+}
+
+function readTextFiles(relativePaths) {
+    if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
+        throw new Error("paths must contain at least one file path.");
+    }
+
+    return Object.fromEntries(
+        relativePaths.map(relativePath => {
+            try {
+                return [relativePath, readTextFile(relativePath)];
+            } catch (error) {
+                return [
+                    relativePath,
+                    { error: error instanceof Error ? error.message : String(error) }
+                ];
+            }
         })
-        .map(entry => ({
-            name: entry.name,
-            type: entry.isDirectory() ? "directory" : "file"
-        }));
+    );
 }
 
 function writeTextFile(relativePath, content) {
@@ -219,13 +262,17 @@ const tools = [
     {
         type: "function",
         name: "list_files",
-        description: "List files and directories at a repository path. Use this to discover relevant project structure before reading files.",
+        description: "List files and directories at a repository path. Prefer one root listing with depth 2 or 3. Do not repeatedly list child directories when the tree already shows their contents.",
         parameters: {
             type: "object",
             properties: {
                 path: {
                     type: "string",
-                    description: "Repository-relative directory path. Use '.' for the repository root."
+                    description: "Repository-relative directory path. Prefer '.' first to inspect the project tree."
+                },
+                depth: {
+                    type: "number",
+                    description: "How many directory levels below path to include. Prefer 2 or 3 to avoid repeated directory discovery."
                 }
             },
             required: ["path"],
@@ -246,6 +293,26 @@ const tools = [
                 }
             },
             required: ["path"],
+            additionalProperties: false
+        },
+        strict: true
+    },
+    {
+        type: "function",
+        name: "read_files",
+        description: "Read multiple relevant UTF-8 files in one tool call. Prefer this over several sequential read_file calls when you already know the paths.",
+        parameters: {
+            type: "object",
+            properties: {
+                paths: {
+                    type: "array",
+                    items: {
+                        type: "string"
+                    },
+                    description: "Repository-relative file paths to read."
+                }
+            },
+            required: ["paths"],
             additionalProperties: false
         },
         strict: true
@@ -322,6 +389,8 @@ async function executeTool(name, args) {
                 return listFiles(args.path);
             case "read_file":
                 return readTextFile(args.path);
+            case "read_files":
+                return readTextFiles(args.paths);
             case "write_file":
                 return writeTextFile(args.path, args.content);
             case "run_validation":
@@ -349,6 +418,7 @@ Your job is to implement the user's task, not merely explain it.
 Rules:
 - Read the relevant .ai instructions, architecture, workflow, agent rules, and task file when available.
 - Inspect existing code before changing it.
+- Minimize model requests: use the recursive list_files result and read_files to inspect multiple known relevant files in one tool call. Do not repeatedly call list_files for individual child directories when their paths are already visible.
 - Prefer the smallest focused implementation.
 - Reuse existing code and dependencies.
 - Do not change the database schema unless the task explicitly requires it.
