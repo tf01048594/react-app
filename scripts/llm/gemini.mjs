@@ -1,3 +1,5 @@
+let previousInteractionId = null;
+
 function toGeminiSchema(schema) {
     if (!schema || typeof schema !== "object") {
         return schema;
@@ -16,10 +18,10 @@ function toGeminiSchema(schema) {
         );
     }
 
-    if (Array.isArray(result.items)) {
-        result.items = result.items.map(toGeminiSchema);
-    } else if (result.items) {
-        result.items = toGeminiSchema(result.items);
+    if (result.items) {
+        result.items = Array.isArray(result.items)
+            ? result.items.map(toGeminiSchema)
+            : toGeminiSchema(result.items);
     }
 
     if (Array.isArray(result.anyOf)) {
@@ -33,77 +35,66 @@ function toGeminiSchema(schema) {
     return result;
 }
 
-function toGeminiFunctionDeclarations(tools) {
+function toGeminiTools(tools) {
     return tools
         .filter(tool => tool.type === "function")
         .map(tool => ({
+            type: "function",
             name: tool.name,
             description: tool.description,
             parameters: toGeminiSchema(tool.parameters)
         }));
 }
 
-function toGeminiContents(input) {
-    return input.flatMap(item => {
-        if (item.role === "user" && typeof item.content === "string") {
-            return [{
-                role: "user",
-                parts: [{ text: item.content }]
-            }];
-        }
+function toUserInput(input) {
+    const firstUserMessage = input.find(
+        item => item.role === "user" && typeof item.content === "string"
+    );
 
-        if (item.type === "function_call") {
-            return [{
-                role: "model",
-                parts: [{
-                    functionCall: {
-                        name: item.name,
-                        args: JSON.parse(item.arguments ?? "{}"),
-                        ...(item.gemini_id ? { id: item.gemini_id } : {})
-                    },
-                    ...(item.thought_signature
-                        ? { thoughtSignature: item.thought_signature }
-                        : {})
-                }]
-            }];
-        }
+    return firstUserMessage?.content ?? "";
+}
 
-        if (item.type === "function_call_output") {
-            return [{
-                role: "user",
-                parts: [{
-                    functionResponse: {
-                        name: item.name ?? "tool",
-                        ...(item.gemini_id ? { id: item.gemini_id } : {}),
-                        response: {
-                            result: JSON.parse(item.output ?? "null")
-                        }
-                    }
-                }]
-            }];
-        }
-
-        return [];
-    });
+function toFunctionResults(input) {
+    return input
+        .filter(item => item.type === "function_call_output")
+        .map(item => ({
+            type: "function_result",
+            name: item.name,
+            call_id: item.call_id,
+            result: [
+                {
+                    type: "text",
+                    text: item.output ?? "{}"
+                }
+            ]
+        }));
 }
 
 export async function callGemini({ apiKey, model, input, tools }) {
-    const functionDeclarations = toGeminiFunctionDeclarations(tools);
-    const contents = toGeminiContents(input);
+    const functionResults = toFunctionResults(input);
+
+    const request = {
+        model,
+        store: false,
+        tools: toGeminiTools(tools)
+    };
+
+    if (previousInteractionId && functionResults.length > 0) {
+        request.previous_interaction_id = previousInteractionId;
+        request.input = functionResults;
+    } else {
+        request.input = toUserInput(input);
+    }
 
     const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
         {
             method: "POST",
             headers: {
+                "x-goog-api-key": apiKey,
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                contents,
-                tools: functionDeclarations.length > 0
-                    ? [{ functionDeclarations }]
-                    : undefined
-            })
+            body: JSON.stringify(request)
         }
     );
 
@@ -114,23 +105,18 @@ export async function callGemini({ apiKey, model, input, tools }) {
     }
 
     const data = JSON.parse(body);
-    const parts = data.candidates?.[0]?.content?.parts ?? [];
-    const functionCalls = parts.filter(part => part.functionCall);
+    previousInteractionId = data.id ?? previousInteractionId;
+
+    const steps = data.steps ?? [];
+    const functionCalls = steps.filter(step => step.type === "function_call");
 
     return {
-        output: functionCalls.map(part => ({
+        output: functionCalls.map(call => ({
             type: "function_call",
-            name: part.functionCall.name,
-            arguments: JSON.stringify(part.functionCall.args ?? {}),
-            call_id: part.functionCall.id ?? part.id ?? part.functionCall.name,
-            gemini_id: part.functionCall.id ?? part.id,
-            ...(part.thoughtSignature
-                ? { thought_signature: part.thoughtSignature }
-                : {})
+            name: call.name,
+            arguments: JSON.stringify(call.arguments ?? {}),
+            call_id: call.id
         })),
-        output_text: parts
-            .filter(part => typeof part.text === "string")
-            .map(part => part.text)
-            .join("\n")
+        output_text: data.output_text ?? ""
     };
 }
