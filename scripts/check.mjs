@@ -7,9 +7,10 @@ const root = process.cwd();
 const frontendDir = path.join(root, "frontend");
 const backendDir = path.join(root, "backend");
 
+const results = {};
 let hasFailure = false;
 
-function runCheck(name, command, cwd) {
+function runCheck(name, command, cwd, key) {
     console.log(`\n=== ${name} ===`);
     console.log(`> ${command}`);
 
@@ -21,43 +22,52 @@ function runCheck(name, command, cwd) {
         });
 
         console.log(`✓ ${name}: PASS`);
+        results[key] = "PASS";
+
         return "PASS";
     } catch {
         console.log(`✗ ${name}: FAIL`);
+        results[key] = "FAIL";
         hasFailure = true;
+
         return "FAIL";
     }
 }
 
-function runOptionalCheck(name, command, cwd, isConfigured) {
+function runOptionalCheck(name, command, cwd, key, isConfigured) {
     console.log(`\n=== ${name} ===`);
 
     if (!isConfigured) {
         console.log(`- ${name}: NOT_CONFIGURED`);
+        results[key] = "NOT_CONFIGURED";
+
         return "NOT_CONFIGURED";
     }
 
-    return runCheck(name, command, cwd);
+    return runCheck(name, command, cwd, key);
 }
 
 // Frontend
 runCheck(
     "Frontend lint",
     "npm run lint",
-    frontendDir
+    frontendDir,
+    "frontendLint"
 );
 
 runCheck(
     "Frontend build",
     "npm run build",
-    frontendDir
+    frontendDir,
+    "frontendBuild"
 );
 
 // Backend
 runCheck(
     "Backend typecheck",
     "npx tsc --noEmit",
-    backendDir
+    backendDir,
+    "backendTypecheck"
 );
 
 // Backend tests
@@ -65,14 +75,25 @@ runOptionalCheck(
     "Backend tests",
     "npm test",
     backendDir,
+    "backendTests",
     true
 );
 
 console.log("\n==============================");
 
+const summary = {
+    success: !hasFailure,
+    status: hasFailure ? "FAILED" : "PASSED",
+    results
+};
+
 if (hasFailure) {
     console.log("VALIDATION FAILED");
-    process.exit(1);
+} else {
+    console.log("VALIDATION PASSED");
 }
 
-console.log("VALIDATION PASSED");
+console.log("\nValidation summary:");
+console.log(JSON.stringify(summary, null, 2));
+
+process.exit(hasFailure ? 1 : 0);

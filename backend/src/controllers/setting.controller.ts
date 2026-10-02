@@ -26,6 +26,11 @@ export async function getSettingsController(req: Request, res: Response) {
 export async function getSettingByIdController(req: Request, res: Response) {
     const { id } = req.params;
     const setting = await getSettingById(Number(id));
+    if (!setting) {
+      return res.status(404).json({
+          message: "Setting not found"
+      });
+  }
     res.json(setting);
 }
 
