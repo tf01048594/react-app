@@ -52,6 +52,10 @@ function isProtectedPath(relativePath) {
 function readTextFile(relativePath) {
     const filePath = resolveInsideRoot(relativePath);
 
+    if (isProtectedPath(relativePath)) {
+        throw new Error(`Reading this path is not allowed: ${relativePath}`);
+    }
+
     if (!fs.existsSync(filePath)) {
         throw new Error(`File not found: ${relativePath}`);
     }
