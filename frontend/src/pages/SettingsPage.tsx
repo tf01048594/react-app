@@ -32,8 +32,28 @@ function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    async function loadInitialSettings() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await getSettings();
+        setSettings(data);
+      } catch (error) {
+        console.error(error);
+
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError("Failed to load settings");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadInitialSettings();
+  }, []);
 
   return (
     <div>
