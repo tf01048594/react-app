@@ -65,7 +65,7 @@ runOptionalCheck(
     "Backend tests",
     "npm test",
     backendDir,
-    false
+    true
 );
 
 console.log("\n==============================");
