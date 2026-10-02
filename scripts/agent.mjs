@@ -50,8 +50,10 @@ loadEnvFile();
 
 const maxIterations = Number(process.env.AGENT_MAX_ITERATIONS ?? 8);
 const provider = process.env.LLM_PROVIDER ?? "openai";
-const model = process.env.LLM_MODEL ??
-    (provider === "gemini" ? process.env.GEMINI_MODEL : process.env.OPENAI_MODEL);
+const model = process.env.LLM_MODEL?.trim() ||
+    (provider === "gemini"
+        ? process.env.GEMINI_MODEL?.trim()
+        : process.env.OPENAI_MODEL?.trim());
 
 const apiKey = provider === "gemini"
     ? process.env.GEMINI_API_KEY
