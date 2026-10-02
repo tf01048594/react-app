@@ -1,10 +1,45 @@
+function toGeminiSchema(schema) {
+    if (!schema || typeof schema !== "object") {
+        return schema;
+    }
+
+    const result = { ...schema };
+    delete result.additionalProperties;
+    delete result.$schema;
+
+    if (result.properties && typeof result.properties === "object") {
+        result.properties = Object.fromEntries(
+            Object.entries(result.properties).map(([key, value]) => [
+                key,
+                toGeminiSchema(value)
+            ])
+        );
+    }
+
+    if (Array.isArray(result.items)) {
+        result.items = result.items.map(toGeminiSchema);
+    } else if (result.items) {
+        result.items = toGeminiSchema(result.items);
+    }
+
+    if (Array.isArray(result.anyOf)) {
+        result.anyOf = result.anyOf.map(toGeminiSchema);
+    }
+
+    if (Array.isArray(result.oneOf)) {
+        result.oneOf = result.oneOf.map(toGeminiSchema);
+    }
+
+    return result;
+}
+
 function toGeminiFunctionDeclarations(tools) {
     return tools
         .filter(tool => tool.type === "function")
         .map(tool => ({
             name: tool.name,
             description: tool.description,
-            parameters: tool.parameters
+            parameters: toGeminiSchema(tool.parameters)
         }));
 }
 
