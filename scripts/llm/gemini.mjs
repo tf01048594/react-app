@@ -70,7 +70,9 @@ function toGeminiContents(input) {
                 parts: [{
                     functionResponse: {
                         name: item.name ?? "tool",
-                        response: JSON.parse(item.output ?? "{}")
+                        response: {
+                            result: JSON.parse(item.output ?? "null")
+                        }
                     }
                 }]
             }];
