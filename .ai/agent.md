@@ -5,6 +5,31 @@
 Implement user requests while preserving the existing architecture
 and ensuring the project passes the validation harness.
 
+## Local agent
+
+The repository includes a local AI coding agent:
+
+```bash
+node scripts/agent.mjs .ai/tasks/build-setting-page.md
+```
+
+The agent uses the OpenAI Responses API and requires:
+
+```text
+OPENAI_API_KEY
+OPENAI_MODEL
+AGENT_MAX_ITERATIONS
+```
+
+Example environment configuration is documented in `.env.example`.
+
+The agent is intentionally local-only at this stage:
+- It can read and write project files.
+- It can run `scripts/check.mjs`.
+- It can read `.ai/validation-report.json`.
+- It does not commit, push, create branches, or create pull requests.
+- Protected files such as `.env`, `.git`, `node_modules`, `dist`, and the validation report cannot be read or written through agent tools.
+
 ## Workflow
 
 1. Read the relevant files before making changes.
