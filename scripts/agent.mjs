@@ -426,6 +426,7 @@ Rules:
 - You can only interact with the repository through the provided tools.
 - Never write .env, .git, node_modules, dist, or the validation report.
 - After implementation, run run_validation.
+- Do not run run_validation repeatedly without making a code change or when the previous validation already passed.
 - If validation fails, read the report output, diagnose the root cause, make a focused fix, and run validation again.
 - Continue until validation passes or you have reached a genuine blocker.
 - Before finishing, call get_changed_files and review the changes.
@@ -458,9 +459,15 @@ for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
         break;
     }
 
+    let validationRequested = false;
+
     for (const call of functionCalls) {
         const args = JSON.parse(call.arguments ?? "{}");
         console.log(`> tool: ${call.name}`);
+
+        if (call.name === "run_validation") {
+            validationRequested = true;
+        }
 
         const result = await executeTool(call.name, args);
 
@@ -470,18 +477,31 @@ for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
             name: call.name,
             output: JSON.stringify(result)
         });
+
+        if (call.name === "run_validation") {
+            const report = result;
+
+            if (report?.success === true) {
+                console.log("\nAgent validation: PASS");
+                console.log(JSON.stringify(report, null, 2));
+                console.log("\nAgent finished successfully.");
+                process.exit(0);
+            }
+        }
     }
 
-    const latestReport = path.join(root, ".ai", "validation-report.json");
+    if (validationRequested) {
+        const latestReport = path.join(root, ".ai", "validation-report.json");
 
-    if (fs.existsSync(latestReport)) {
-        const report = JSON.parse(fs.readFileSync(latestReport, "utf8"));
+        if (fs.existsSync(latestReport)) {
+            const report = JSON.parse(fs.readFileSync(latestReport, "utf8"));
 
-        if (report.success === true) {
-            console.log("\nAgent validation: PASS");
-            console.log(JSON.stringify(report, null, 2));
-            console.log("\nAgent finished successfully.");
-            process.exit(0);
+            if (report.success === true) {
+                console.log("\nAgent validation: PASS");
+                console.log(JSON.stringify(report, null, 2));
+                console.log("\nAgent finished successfully.");
+                process.exit(0);
+            }
         }
     }
 }
