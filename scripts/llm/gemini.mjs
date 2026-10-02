@@ -75,7 +75,7 @@ export async function callGemini({ apiKey, model, input, tools }) {
 
     const request = {
         model,
-        store: false,
+        store: true,
         tools: toGeminiTools(tools)
     };
 
