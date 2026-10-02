@@ -21,6 +21,10 @@ OPENAI_MODEL
 AGENT_MAX_ITERATIONS
 ```
 
+The agent automatically loads a local root `.env` file when present.
+Shell environment variables take precedence over values from `.env`.
+The actual `.env` file must never be committed.
+
 Example environment configuration is documented in `.env.example`.
 
 The agent is intentionally local-only at this stage:
