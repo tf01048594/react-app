@@ -217,7 +217,16 @@ function writeTextFile(relativePath, content) {
     return `Wrote ${relativePath}`;
 }
 
+let lastValidationStatus = null;
+let lastValidationReport = null;
+
 function runValidation() {
+    const currentChanges = getChangedFiles();
+
+    if (lastValidationStatus === currentChanges && lastValidationReport) {
+        return lastValidationReport;
+    }
+
     try {
         execFileSync(
             process.execPath,
@@ -238,7 +247,11 @@ function runValidation() {
         throw new Error("Validation report was not generated.");
     }
 
-    return JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    lastValidationStatus = currentChanges;
+    lastValidationReport = report;
+
+    return report;
 }
 
 function getChangedFiles() {
@@ -426,7 +439,7 @@ Rules:
 - You can only interact with the repository through the provided tools.
 - Never write .env, .git, node_modules, dist, or the validation report.
 - After implementation, run run_validation.
-- Do not run run_validation repeatedly without making a code change or when the previous validation already passed.
+- Do not run run_validation repeatedly without making a code change. The harness caches validation for an unchanged working tree, so after a failed validation you must make a focused code change before validating again.
 - If validation fails, read the report output, diagnose the root cause, make a focused fix, and run validation again.
 - Continue until validation passes or you have reached a genuine blocker.
 - Before finishing, call get_changed_files and review the changes.
@@ -444,7 +457,10 @@ let input = [
     }
 ];
 
+let completedIterations = 0;
+
 for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    completedIterations = iteration;
     console.log(`\n=== Agent iteration ${iteration}/${maxIterations} ===`);
 
     const response = await callModel(input);
@@ -455,7 +471,14 @@ for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     );
 
     if (functionCalls.length === 0) {
-        console.log(response.output_text ?? "Agent finished without a final message.");
+        const finalMessage = response.output_text?.trim();
+
+        if (finalMessage) {
+            console.log(finalMessage);
+        } else {
+            console.log("Agent returned no further tool calls.");
+        }
+
         break;
     }
 
@@ -506,5 +529,5 @@ for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     }
 }
 
-console.error(`\nAgent stopped after ${maxIterations} iterations without validation success.`);
+console.error(`\nAgent stopped after ${completedIterations} iteration(s) without validation success.`);
 process.exit(1);
