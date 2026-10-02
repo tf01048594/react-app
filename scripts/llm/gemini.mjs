@@ -58,7 +58,8 @@ function toGeminiContents(input) {
                 parts: [{
                     functionCall: {
                         name: item.name,
-                        args: JSON.parse(item.arguments ?? "{}")
+                        args: JSON.parse(item.arguments ?? "{}"),
+                        ...(item.gemini_id ? { id: item.gemini_id } : {})
                     },
                     ...(item.thought_signature
                         ? { thoughtSignature: item.thought_signature }
@@ -73,6 +74,7 @@ function toGeminiContents(input) {
                 parts: [{
                     functionResponse: {
                         name: item.name ?? "tool",
+                        ...(item.gemini_id ? { id: item.gemini_id } : {}),
                         response: {
                             result: JSON.parse(item.output ?? "null")
                         }
@@ -120,7 +122,8 @@ export async function callGemini({ apiKey, model, input, tools }) {
             type: "function_call",
             name: part.functionCall.name,
             arguments: JSON.stringify(part.functionCall.args ?? {}),
-            call_id: part.functionCall.name,
+            call_id: part.functionCall.id ?? part.id ?? part.functionCall.name,
+            gemini_id: part.functionCall.id ?? part.id,
             ...(part.thoughtSignature
                 ? { thought_signature: part.thoughtSignature }
                 : {})
