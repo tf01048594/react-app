@@ -14,13 +14,14 @@ and ensuring the project passes the validation harness.
 5. Understand the requested change.
 6. Make the smallest reasonable implementation.
 7. Run `node scripts/check.mjs`.
-8. If validation fails:
-   - Read the failure output.
+8. Read the machine-readable report at `.ai/validation-report.json`.
+9. If validation fails:
+   - Read the failure output from the report.
    - Identify the root cause.
    - Fix the code.
    - Run validation again.
-9. Do not report completion until validation passes.
-10. Review the changed files before finishing.
+10. Do not report completion until validation passes.
+11. Review the changed files before finishing.
 
 ## Validation
 
@@ -28,3 +29,12 @@ The project validation command is:
 
 ```bash
 node scripts/check.mjs
+```
+
+The command writes a machine-readable report to:
+
+```text
+.ai/validation-report.json
+```
+
+The report is local runtime output and is ignored by Git.
