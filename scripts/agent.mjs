@@ -4,12 +4,59 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
+
+function loadEnvFile() {
+    const envPath = path.join(root, ".env");
+
+    if (!fs.existsSync(envPath)) {
+        return;
+    }
+
+    const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (!trimmed || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+
+        if (!match) {
+            continue;
+        }
+
+        const [, key, rawValue] = match;
+        let value = rawValue.trim();
+
+        if (
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))
+        ) {
+            value = value.slice(1, -1);
+        }
+
+        // Explicit shell environment variables take precedence over .env.
+        if (process.env[key] === undefined) {
+            process.env[key] = value;
+        }
+    }
+}
+
+loadEnvFile();
+
 const maxIterations = Number(process.env.AGENT_MAX_ITERATIONS ?? 8);
-const model = process.env.OPENAI_MODEL ?? "gpt-6-luna";
+const model = process.env.OPENAI_MODEL;
 const apiKey = process.env.OPENAI_API_KEY;
 
 if (!apiKey) {
-    console.error("Missing OPENAI_API_KEY.");
+    console.error("Missing OPENAI_API_KEY. Configure it in .env or the shell environment.");
+    process.exit(1);
+}
+
+if (!model) {
+    console.error("Missing OPENAI_MODEL. Configure it in .env or the shell environment.");
     process.exit(1);
 }
 
