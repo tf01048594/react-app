@@ -58,11 +58,11 @@ function toGeminiContents(input) {
                 parts: [{
                     functionCall: {
                         name: item.name,
-                        args: JSON.parse(item.arguments ?? "{}"),
-                        ...(item.thought_signature
-                            ? { thoughtSignature: item.thought_signature }
-                            : {})
-                    }
+                        args: JSON.parse(item.arguments ?? "{}")
+                    },
+                    ...(item.thought_signature
+                        ? { thoughtSignature: item.thought_signature }
+                        : {})
                 }]
             }];
         }
