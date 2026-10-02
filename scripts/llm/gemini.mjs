@@ -69,15 +69,6 @@ function toFunctionResults(input) {
         }));
 }
 
-function debugGemini(label, value) {
-    if (process.env.AGENT_DEBUG_GEMINI !== "true") {
-        return;
-    }
-
-    console.log(`[Gemini debug] ${label}`);
-    console.dir(value, { depth: 8, maxArrayLength: 50 });
-}
-
 export async function callGemini({ apiKey, model, input, tools }) {
     if (!geminiHistory) {
         geminiHistory = toInitialInput(input);
@@ -85,12 +76,7 @@ export async function callGemini({ apiKey, model, input, tools }) {
 
     const functionResults = toFunctionResults(input);
 
-    debugGemini("incoming function results", functionResults);
-    debugGemini("history before request", geminiHistory);
-
     geminiHistory.push(...functionResults);
-
-    debugGemini("history sent to Gemini", geminiHistory);
 
     const response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/interactions",
@@ -118,16 +104,11 @@ export async function callGemini({ apiKey, model, input, tools }) {
     const data = JSON.parse(body);
     const steps = data.steps ?? [];
 
-    debugGemini("raw response", data);
-    debugGemini("returned steps", steps);
-
     // Preserve Gemini's model-generated steps exactly as returned.
     // This is required for stateless function-calling history.
     geminiHistory.push(...steps);
 
     const functionCalls = steps.filter(step => step.type === "function_call");
-
-    debugGemini("function calls", functionCalls);
 
     return {
         output: functionCalls.map(call => ({
