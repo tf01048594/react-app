@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { callOpenAI } from "./llm/openai.mjs";
+import { callGemini } from "./llm/gemini.mjs";
 
 const root = process.cwd();
 
@@ -47,16 +49,26 @@ function loadEnvFile() {
 loadEnvFile();
 
 const maxIterations = Number(process.env.AGENT_MAX_ITERATIONS ?? 8);
-const model = process.env.OPENAI_MODEL;
-const apiKey = process.env.OPENAI_API_KEY;
+const provider = process.env.LLM_PROVIDER ?? "openai";
+const model = process.env.LLM_MODEL ?? process.env.OPENAI_MODEL;
+
+const apiKey = provider === "gemini"
+    ? process.env.GEMINI_API_KEY
+    : process.env.OPENAI_API_KEY;
 
 if (!apiKey) {
-    console.error("Missing OPENAI_API_KEY. Configure it in .env or the shell environment.");
+    const keyName = provider === "gemini" ? "GEMINI_API_KEY" : "OPENAI_API_KEY";
+    console.error(`Missing ${keyName}. Configure it in .env or the shell environment.`);
     process.exit(1);
 }
 
 if (!model) {
-    console.error("Missing OPENAI_MODEL. Configure it in .env or the shell environment.");
+    console.error("Missing LLM_MODEL. Configure it in .env or the shell environment.");
+    process.exit(1);
+}
+
+if (provider !== "openai" && provider !== "gemini") {
+    console.error(`Unsupported LLM_PROVIDER: ${provider}. Use openai or gemini.`);
     process.exit(1);
 }
 
@@ -283,28 +295,21 @@ const tools = [
 ];
 
 async function callModel(input) {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+    if (provider === "gemini") {
+        return callGemini({
+            apiKey,
             model,
             input,
-            tools,
-            tool_choice: "auto",
-            parallel_tool_calls: false
-        })
-    });
-
-    const body = await response.text();
-
-    if (!response.ok) {
-        throw new Error(`OpenAI API ${response.status}: ${body}`);
+            tools
+        });
     }
 
-    return JSON.parse(body);
+    return callOpenAI({
+        apiKey,
+        model,
+        input,
+        tools
+    });
 }
 
 async function executeTool(name, args) {
@@ -389,6 +394,7 @@ for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
         input.push({
             type: "function_call_output",
             call_id: call.call_id,
+            name: call.name,
             output: JSON.stringify(result)
         });
     }
